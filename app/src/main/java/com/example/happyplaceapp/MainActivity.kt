@@ -20,9 +20,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            HappyPlaceAppTheme {
-                CameraCaptureTestScreen() // Deine Test-Oberfläche zum Foto aufnehmen
-            }
+
         }
     }
 }

@@ -1,40 +1,78 @@
 package com.example.happyplaceapp
 
 import android.net.Uri
+import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.core.content.FileProvider
-import java.io.File
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import java.io.File
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.happyplaceapp.data.Place
+
+// ------------------ aktuelle Standortanzeige ------------------
 
 @Composable
-fun AddPlace() { //states speichern Name,Beschreibung;Pfad zzum Bild, mutableStateOf sorgt dafür, dass alles was sich ändert dirket auch inder UI verändert wird
+fun CurrentLocationView(viewModel: LocationViewModel = viewModel()) {
+    // Beobachte den aktuellen Standort vom ViewModel und aktualisiere die UI automatisch
+    val location by viewModel.location.collectAsState()
+    val context = LocalContext.current
+
+    // Launcher für Berechtigungsanfrage (zur Laufzeit)
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.fetchLocation()
+        }
+    }
+
+    // Starte die Berechtigungsabfrage beim ersten Laden
+    LaunchedEffect(Unit) {
+        permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
+    // UI für die Standortanzeige
+    Column(modifier = Modifier.padding(16.dp)) {
+        Text("Aktueller Standort:")
+        if (location != null) {
+            Text("Lat: ${location?.latitude}, Lng: ${location?.longitude}")
+        } else {
+            Text("Wird geladen...")
+        }
+    }
+}
+
+// ------------------ Hauptfunktion für Ort hinzufügen ------------------
+
+@Composable
+fun AddPlace() {
+    // Speichert Name, Beschreibung, Pfad zum Bild
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var imageUri by remember { mutableStateOf<Uri?>(null) }
-    var cameraImageUri by remember { mutableStateOf<Uri?>(null) } //der state an dem ein Kamera bild gespeichert wird
+    var cameraImageUri by remember { mutableStateOf<Uri?>(null) }
+    val placeViewModel: PlaceViewModel = viewModel() // Hol das ViewModel zur Verwendung
 
-    val context = LocalContext.current //Manche Funktionen brauchen immer den aktuellen KOntext z:b. ImageRequest, durch LOcal.Context kann drauf zugegriffen werden
 
-    //der galarie Launcher kann in der Galerie App ein Bild auswählen und dieses dem Code zurückgeben
+    val context = LocalContext.current
+
+    // Galerie öffnen und Bild auswählen
     val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()// öffnet die Galerie und wählt aus
-    ) { uri: Uri? -> //uri ist der Rückgabewert
-        imageUri = uri // hier wird die auswahl gespeichtert
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        imageUri = uri
     }
 
-    //Bilder die geschosssen werden werden sie als Uri in dem state imageUri gespeichert
+    // Kamera öffnen und Bild aufnehmen
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
@@ -42,31 +80,32 @@ fun AddPlace() { //states speichern Name,Beschreibung;Pfad zzum Bild, mutableSta
             imageUri = cameraImageUri
         }
     }
-    // beim Öffnen der kamera wird schon ein konkreter speicherort verlangt,
+
+    // Temporäre Datei erstellen für Kamerabild
     fun createImageFile(): Uri {
-        val imageFile = File.createTempFile("happy_place_", ".jpg", context.cacheDir)//createTempFile erzeugt diese Datei im cache-Order von meiner App
-        return FileProvider.getUriForFile( //erstellt die Uri dazu, das weiter geben geht nur über den file provider
+        val imageFile = File.createTempFile("happy_place_", ".jpg", context.cacheDir)
+        return FileProvider.getUriForFile(
             context,
             "${context.packageName}.provider",
             imageFile
         )
     }
 
+    // ------------------ UI-Layout ------------------
 
-//Layout der UI
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(text = "Dein neuer lieblings Ort", style = MaterialTheme.typography.headlineSmall)
+        Text(text = "Dein neuer Lieblingsort", style = MaterialTheme.typography.headlineSmall)
 
         OutlinedTextField(
-            value = title, //was im textfeld steht
-            onValueChange = { title = it },//das es sich im Textfeld beim schriebn verändert
+            value = title,
+            onValueChange = { title = it },
             label = { Text("Name") },
-            modifier = Modifier.fillMaxWidth()//nimmt ganze breite ein
+            modifier = Modifier.fillMaxWidth()
         )
 
         OutlinedTextField(
@@ -75,15 +114,15 @@ fun AddPlace() { //states speichern Name,Beschreibung;Pfad zzum Bild, mutableSta
             label = { Text("Beschreibung") },
             modifier = Modifier.fillMaxWidth()
         )
-//der Galarielauncher der oben schon definiert wurde kann jetzt hier durch den Buttonb aufgerufen werden
-        Button(
-            onClick = { galleryLauncher.launch("image/*") },//galerie öffnet sich
-            modifier = Modifier.align(Alignment.CenterHorizontally) //Button ist zenteriert
-        ) {
-            Text("Foto aus deiner Galerie auswählen")
 
+        Button(
+            onClick = { galleryLauncher.launch("image/*") },
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        ) {
+            Text("Foto aus Galerie auswählen")
         }
-        Button( // Button für ein Foto mit der Kamera auswählen
+
+        Button(
             onClick = {
                 val uri = createImageFile()
                 cameraImageUri = uri
@@ -91,8 +130,27 @@ fun AddPlace() { //states speichern Name,Beschreibung;Pfad zzum Bild, mutableSta
             },
             modifier = Modifier.align(Alignment.CenterHorizontally)
         ) {
-            Text("Foto mit deiner Kamera aufnehmen")
+            Text("Foto mit Kamera aufnehmen")
         }
+        Button(
+            onClick = {
+                // Neues Place-Objekt mit aktuellen Werten aus den Eingabefeldern
+                val place = Place(
+                    title = title,                         // Titel aus Textfeld
+                    description = description,             // Beschreibung aus Textfeld
+                    imageUri = imageUri.toString(),        // Bild-URI als String
+                    latitude = location?.latitude,
+                    longitude = location?.longitude
+                )
+
+                // Speichern über ViewModel
+                placeViewModel.addPlace(place)
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Ort speichern")
+        }
+
 
 
         imageUri?.let { uri ->
@@ -105,7 +163,10 @@ fun AddPlace() { //states speichern Name,Beschreibung;Pfad zzum Bild, mutableSta
             )
         }
 
-        Spacer(modifier = Modifier.weight(1f)) //Flex abstand
+        // Zeige den aktuellen Standort
+        CurrentLocationView()
+
+        Spacer(modifier = Modifier.weight(1f))
 
         Button(
             onClick = {
@@ -115,7 +176,7 @@ fun AddPlace() { //states speichern Name,Beschreibung;Pfad zzum Bild, mutableSta
         ) {
             Text("Ort speichern")
         }
-
-
     }
 }
+
+
